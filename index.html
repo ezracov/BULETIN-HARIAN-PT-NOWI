@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buletin Harian PT NOWI - Interaktif Dashboard</title>
+    <!-- Tailwind CSS (Styling) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js (Grafik) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SheetJS (Excel Parser) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans p-4 md:p-6">
+
+    <!-- Header & Filter -->
+    <header class="flex flex-wrap justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div>
+            <h1 class="text-xl font-bold text-slate-900 tracking-tight">BULETIN HARIAN PT NOWI</h1>
+            <p class="text-sm text-slate-500" id="current-date-title">Data Status: 14 SEP 2026</p>
+        </div>
+        <div class="flex items-center space-x-3 mt-4 sm:mt-0">
+            <input type="date" id="date-picker" value="2026-09-14" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-slate-50 font-medium">
+            <button onclick="toggleUploadModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-semibold transition">
+                + Upload Excel
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Grid Dashboard -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Kolom Kiri & Tengah (Grafik & Tabel Produksi) -->
+        <div class="lg:col-span-2 space-y-6">
+            
+            <!-- Grafik Tren IPO OK -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-sm font-bold text-slate-700 mb-3">IPO PRODUCTION OK CHART</h2>
+                <div class="h-64">
+                    <canvas id="ipoTrendChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Tabel IPO Produksi -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-sm font-bold text-slate-700">IPO PRODUKSI (Klik baris untuk detail NG)</h2>
+                    <span class="text-xs text-slate-400">Klik item lens</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                                <th class="p-2">LENS</th>
+                                <th class="p-2 text-center">SECTION</th>
+                                <th class="p-2 text-right">QTY CHECKED</th>
+                                <th class="p-2 text-right">OK QTY</th>
+                                <th class="p-2 text-right">QTY NG</th>
+                                <th class="p-2 text-center">% OK</th>
+                            </tr>
+                        </thead>
+                        <tbody id="production-table-body">
+                            <!-- Data Diisi via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Kolom Kanan (Defect Pareto & NG Breakdown) -->
+        <div class="space-y-6">
+
+            <!-- Grafik Pareto NG Terburuk -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-sm font-bold text-slate-700 mb-1">NG TERBURUK</h2>
+                <p class="text-xs text-slate-400 mb-3">Klik batang grafik untuk memfilter tabel di bawah</p>
+                <div class="h-48">
+                    <canvas id="ngParetoChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Tabel Breakdown NG per Lens -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-sm font-bold text-slate-700" id="ng-table-title">BREAKDOWN NG (SEMUA)</h2>
+                    <button id="reset-ng-filter" onclick="loadNGDetails()" class="hidden text-xs text-blue-600 hover:underline">Reset Filter</button>
+                </div>
+                <div class="overflow-x-auto max-h-64">
+                    <table class="w-full text-xs border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                                <th class="p-2 text-left">NG CATEGORY</th>
+                                <th class="p-2 text-left">LENS</th>
+                                <th class="p-2 text-right">TOTAL NG</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ng-table-body">
+                            <!-- Data Diisi via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Modal Popup Upload Excel -->
+    <div id="upload-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-md">
+            <h3 class="text-base font-bold text-slate-900 mb-4">Upload File Excel Harian</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Pilih Tanggal Data</label>
+                    <input type="date" id="upload-date" class="w-full px-3 py-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">File Excel (.xlsx)</label>
+                    <input type="file" id="excel-file" accept=".xlsx, .xls" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                </div>
+            </div>
+            <div class="flex justify-end space-x-2 mt-6">
+                <button onclick="toggleUploadModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Batal</button>
+                <button onclick="processExcelUpload()" class="px-4 py-2 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 rounded-lg">Proses Upload</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Popup Detail Lens -->
+    <div id="lens-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center hidden">
+        <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-md">
+            <h3 class="text-base font-bold text-slate-900 mb-1" id="modal-lens-title">Detail Lens</h3>
+            <p class="text-xs text-slate-500 mb-4" id="modal-lens-subtitle">Rincian jenis NG yang ditemukan</p>
+            
+            <div class="overflow-x-auto mb-4">
+                <table class="w-full text-xs border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 border-b text-slate-600 font-bold">
+                            <th class="p-2 text-left">JENIS DEFECT</th>
+                            <th class="p-2 text-right">QTY NG</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modal-lens-body">
+                        <!-- Data Rincian Lens -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="closeLensModal()" class="px-4 py-2 text-xs font-semibold bg-slate-800 text-white rounded-lg">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Logic -->
+    <script>
+        // === 1. KONFIGURASI SUPABASE ===
+        const SUPABASE_URL = 'https://xezmeycsxxbojwvkfuhl.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_X6ykmuuHzDfL6Ntw6kynAQ_ogFl2o1l';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Chart Instances
+        let paretoChartInstance = null;
+        let trendChartInstance = null;
+
+        // Init App saat pertama kali dibuka
+        document.addEventListener('DOMContentLoaded', () => {
+            const datePicker = document.getElementById('date-picker');
+            loadDashboardData(datePicker.value);
+
+            datePicker.addEventListener('change', (e) => {
+                loadDashboardData(e.target.value);
+            });
+        });
+
+        // === 2. FETCH DATA DASHBOARD ===
+        async function loadDashboardData(selectedDate) {
+            document.getElementById('current-date-title').innerText = `Data Status: ${selectedDate}`;
+            
+            await loadProductionTable(selectedDate);
+            await loadNGPareto(selectedDate);
+            await loadNGDetails(selectedDate);
+            await loadIPOTrendChart();
+        }
+
+        // Load Tabel Produksi
+        async function loadProductionTable(date) {
+            const { data, error } = await supabase
+                .from('production_logs')
+                .select('*')
+                .eq('date', date);
+
+            const tbody = document.getElementById('production-table-body');
+            tbody.innerHTML = '';
+
+            if (error || !data || data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">Tidak ada data produksi untuk tanggal ini.</td></tr>`;
+                return;
+            }
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-100 hover:bg-blue-50/50 cursor-pointer transition";
+                tr.onclick = () => showLensDetailModal(row.lens_type, date);
+
+                // Warna indikator % OK
+                let bgClass = "bg-green-100 text-green-800";
+                if (row.ok_percent < 50) bgClass = "bg-red-100 text-red-800";
+                else if (row.ok_percent < 80) bgClass = "bg-orange-100 text-orange-800";
+
+                tr.innerHTML = `
+                    <td class="p-2 font-semibold text-slate-700">${row.lens_type}</td>
+                    <td class="p-2 text-center text-slate-500">${row.section}</td>
+                    <td class="p-2 text-right">${row.qty_checked}</td>
+                    <td class="p-2 text-right text-green-700 font-semibold">${row.qty_ok}</td>
+                    <td class="p-2 text-right text-red-600 font-semibold">${row.qty_ng}</td>
+                    <td class="p-2 text-center"><span class="px-2 py-0.5 rounded-full font-bold ${bgClass}">${row.ok_percent}%</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Load Pareto Grafik NG & Filter Interaktif
+        async function loadNGPareto(date) {
+            const { data, error } = await supabase
+                .from('ng_details')
+                .select('ng_category, ng_qty')
+                .eq('date', date);
+
+            if (error || !data) return;
+
+            // Group by category
+            const categoryMap = {};
+            data.forEach(item => {
+                categoryMap[item.ng_category] = (categoryMap[item.ng_category] || 0) + item.ng_qty;
+            });
+
+            const labels = Object.keys(categoryMap);
+            const values = Object.values(categoryMap);
+
+            const ctx = document.getElementById('ngParetoChart').getContext('2d');
+            if (paretoChartInstance) paretoChartInstance.destroy();
+
+            paretoChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total NG',
+                        data: values,
+                        backgroundColor: '#ef4444',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    onClick: (evt, elements) => {
+                        if (elements.length > 0) {
+                            const index = elements[0].index;
+                            const clickedCategory = labels[index];
+                            filterNGTableByCategory(clickedCategory, date);
+                        }
+                    }
+                }
+            });
+        }
+
+        // Load Tabel Breakdown NG
+        async function loadNGDetails(date = document.getElementById('date-picker').value, categoryFilter = null) {
+            let query = supabase.from('ng_details').select('*').eq('date', date);
+            
+            if (categoryFilter) {
+                query = query.eq('ng_category', categoryFilter);
+                document.getElementById('ng-table-title').innerText = `BREAKDOWN NG (${categoryFilter})`;
+                document.getElementById('reset-ng-filter').classList.remove('hidden');
+            } else {
+                document.getElementById('ng-table-title').innerText = `BREAKDOWN NG (SEMUA)`;
+                document.getElementById('reset-ng-filter').classList.add('hidden');
+            }
+
+            const { data, error } = await query;
+            const tbody = document.getElementById('ng-table-body');
+            tbody.innerHTML = '';
+
+            if (error || !data || data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-slate-400">Tidak ada rincian NG.</td></tr>`;
+                return;
+            }
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-slate-100";
+                tr.innerHTML = `
+                    <td class="p-2 font-bold text-red-600">${row.ng_category}</td>
+                    <td class="p-2 text-slate-700">${row.lens_type}</td>
+                    <td class="p-2 text-right font-semibold">${row.ng_qty}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filterNGTableByCategory(category, date) {
+            loadNGDetails(date, category);
+        }
+
+        // Load Grafik Tren Harian (Line + Bar)
+        async function loadIPOTrendChart() {
+            const ctx = document.getElementById('ipoTrendChart').getContext('2d');
+            if (trendChartInstance) trendChartInstance.destroy();
+
+            trendChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['01/09', '02/09', '03/09', '04/09', '07/09', '08/09', '09/09', '10/09', '11/09', '12/09', '14/09'],
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: '% OK Trend',
+                            data: [45, 65, 45, 60, 47, 60, 53, 67, 72, 77, 58],
+                            borderColor: '#10b981',
+                            borderWidth: 2,
+                            fill: false
+                        },
+                        {
+                            label: 'Volume Qty',
+                            data: [325, 206, 422, 146, 167, 109, 174, 349, 360, 416, 362],
+                            backgroundColor: '#e2e8f0'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        // === 3. MODAL POPUP & DRILL-DOWN LOGIC ===
+        async function showLensDetailModal(lensType, date) {
+            document.getElementById('modal-lens-title').innerText = lensType;
+            document.getElementById('modal-lens-subtitle').innerText = `Rincian Defek Tanggal ${date}`;
+            
+            const { data, error } = await supabase
+                .from('ng_details')
+                .select('ng_category, ng_qty')
+                .eq('date', date)
+                .eq('lens_type', lensType);
+
+            const tbody = document.getElementById('modal-lens-body');
+            tbody.innerHTML = '';
+
+            if (data && data.length > 0) {
+                data.forEach(item => {
+                    tbody.innerHTML += `
+                        <tr class="border-b">
+                            <td class="p-2 font-medium text-slate-700">${item.ng_category}</td>
+                            <td class="p-2 text-right font-bold text-red-600">${item.ng_qty}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                tbody.innerHTML = `<tr><td colspan="2" class="p-3 text-center text-slate-400">Tidak ada defek ditemukan (100% OK).</td></tr>`;
+            }
+
+            document.getElementById('lens-modal').classList.remove('hidden');
+        }
+
+        function closeLensModal() {
+            document.getElementById('lens-modal').classList.add('hidden');
+        }
+
+        // === 4. PARSER EXCEL & UPLOAD LOGIC ===
+        function toggleUploadModal() {
+            const modal = document.getElementById('upload-modal');
+            modal.classList.toggle('hidden');
+            document.getElementById('upload-date').value = document.getElementById('date-picker').value;
+        }
+
+        async function processExcelUpload() {
+            const fileInput = document.getElementById('excel-file');
+            const uploadDate = document.getElementById('upload-date').value;
+
+            if (!fileInput.files.length) {
+                alert('Pilih file Excel terlebih dahulu!');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = async (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                
+                // Ambil Sheet pertama
+                const sheetName = workbook.SheetNames[0];
+                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+                // Format data untuk tabel production_logs
+                const formattedProductionData = rows.map(r => ({
+                    date: uploadDate,
+                    lens_type: r['LENS'] || r['Lens'],
+                    section: r['SECTION'] || r['Section'] || 'IPO',
+                    qty_checked: r['QTY CHECKED'] || r['Checked'] || 0,
+                    qty_ok: r['OK QTY'] || r['OK'] || 0,
+                    qty_ng: r['QTY NG'] || r['NG'] || 0
+                }));
+
+                // Upload ke Supabase
+                const { error } = await supabase.from('production_logs').insert(formattedProductionData);
+
+                if (error) {
+                    alert('Gagal mengupload data: ' + error.message);
+                } else {
+                    alert('Data berhasil diunggah!');
+                    toggleUploadModal();
+                    loadDashboardData(uploadDate);
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+</body>
+</html>
