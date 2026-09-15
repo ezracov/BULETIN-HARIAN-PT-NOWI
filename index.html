@@ -161,8 +161,8 @@
     // === 1. KONFIGURASI SUPABASE ===
     const SUPABASE_URL = 'https://xezmeycsxxbojwvkfuhl.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_X6ykmuuHzDfL6Ntw6kynAQ_ogFl2o1l';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
+    // ✅ KODE BARU (Sudah Diperbaiki)
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     // Global Chart Instances
     let paretoChartInstance = null;
     let trendChartInstance = null;
@@ -210,7 +210,7 @@
 
     // Load Tabel Produksi
     async function loadProductionTable(date) {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('production_logs')
             .select('*')
             .eq('date', date);
@@ -246,7 +246,7 @@
 
     // Load Pareto Grafik NG
     async function loadNGPareto(date) {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('ng_details')
             .select('ng_category, ng_qty')
             .eq('date', date);
@@ -293,7 +293,7 @@
 
     // Load Tabel Breakdown NG
     async function loadNGDetails(date = document.getElementById('date-picker').value, categoryFilter = null) {
-        let query = supabase.from('ng_details').select('*').eq('date', date);
+        let query = supabaseClient.from('ng_details').select('*').eq('date', date);
         
         if (categoryFilter) {
             query = query.eq('ng_category', categoryFilter);
@@ -367,7 +367,7 @@
         document.getElementById('modal-lens-title').innerText = lensType;
         document.getElementById('modal-lens-subtitle').innerText = `Rincian Defek Tanggal ${date}`;
         
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('ng_details')
             .select('ng_category, ng_qty')
             .eq('date', date)
@@ -422,7 +422,7 @@
                     qty_ng: parseInt(r['QTY NG'] || r['NG'] || 0)
                 }));
 
-                const { error } = await supabase.from('production_logs').insert(formattedProductionData);
+                const { error } = await supabaseClient.from('production_logs').insert(formattedProductionData);
 
                 if (error) {
                     alert('Gagal mengupload data: ' + error.message);
