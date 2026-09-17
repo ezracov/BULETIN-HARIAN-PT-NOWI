@@ -79,13 +79,10 @@
                 <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
                     <div class="flex items-center space-x-2">
                         <h2 class="text-sm font-bold text-slate-700">PRODUCTION OK CHART</h2>
-                        <!-- Dropdown Filter Section -->
-                        <select id="section-filter" onchange="loadIPOTrendChart()" class="text-xs font-bold bg-slate-100 border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 no-print">
-                            <option value="ALL">SEMUA SECTION</option>
-                            <option value="IPO" selected>SECTION: IPO</option>
-                            <option value="COATING">SECTION: COATING</option>
-                            <option value="HARDCOATING">SECTION: HARDCOATING</option>
-                        </select>
+                    <!-- Dropdown Filter Section (Dinamis dari DB) -->
+                    <select id="section-filter" onchange="loadIPOTrendChart()" class="text-xs font-bold bg-slate-100 border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 no-print">
+                         <option value="ALL">SEMUA SECTION</option>
+                    </select>
                     </div>
                     <span class="text-xs text-slate-400 font-medium">Target: <strong class="text-emerald-600">80% OK</strong></span>
                 </div>
@@ -275,7 +272,9 @@
         }
 
         // === 4. EVENT LISTENER & INIT ===
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            await populateSectionDropdown(); // Isi dropdown section dari DB
+
             const datePicker = document.getElementById('date-picker');
             if (datePicker) {
                 loadDashboardData(datePicker.value);
@@ -348,6 +347,35 @@
 
             updateKPICards(data, totalChecked, totalOK);
         }
+
+
+        // Function untuk mengambil daftar section unik dari database
+        async function populateSectionDropdown() {
+            const { data, error } = await supabaseClient
+                .from('production_logs')
+                .select('section');
+
+            if (error || !data) return;
+
+            // Ambil nilai unik dari kolom section & filter nilai kosong/null
+            const uniqueSections = [...new Set(data.map(item => item.section).filter(Boolean))].sort();
+
+            const selectElem = document.getElementById('section-filter');
+            const currentValue = selectElem.value; // Simpan pilihan pengguna saat ini jika ada
+
+            // Reset isi dropdown ke pilihan default
+            selectElem.innerHTML = `<option value="ALL">SEMUA SECTION</option>`;
+
+            // Isikan pilihan section dari database
+            uniqueSections.forEach(sec => {
+                const option = document.createElement('option');
+                option.value = sec;
+                option.textContent = `SECTION: ${sec.toUpperCase()}`;
+                if (sec === currentValue) option.selected = true;
+                selectElem.appendChild(option);
+            });
+        }
+
 
         // Update Ringkasan KPI
         function updateKPICards(data, totalChecked, totalOK) {
@@ -703,6 +731,7 @@
                     } else {
                         showToast('Data Excel berhasil diunggah!', 'success');
                         toggleUploadModal();
+                        await populateSectionDropdown(); // Refresh pilihan section jika ada section baru dari Excel
                         loadDashboardData(uploadDate);
                     }
                 } catch (err) {
