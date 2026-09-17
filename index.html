@@ -12,7 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- SheetJS (Excel Parser) -->
+    <!-- SheetJS (Excel Parser & Exporter) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         @media print {
@@ -159,7 +159,13 @@
     <!-- Modal Popup Upload Excel -->
     <div id="upload-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center hidden no-print z-40">
         <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-md">
-            <h3 class="text-base font-bold text-slate-900 mb-4">Upload File Excel Harian</h3>
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-bold text-slate-900">Upload File Excel Harian</h3>
+                <button onclick="downloadExcelTemplate()" class="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200 transition">
+                    📥 Download Template
+                </button>
+            </div>
+            
             <div class="space-y-4">
                 <div>
                     <label class="block text-xs font-bold text-slate-600 mb-1">Pilih Tanggal Data</label>
@@ -170,6 +176,7 @@
                     <input type="file" id="excel-file" accept=".xlsx, .xls" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                 </div>
             </div>
+
             <div class="flex justify-end space-x-2 mt-6">
                 <button onclick="toggleUploadModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg">Batal</button>
                 <button id="btn-process-upload" onclick="processExcelUpload()" class="px-4 py-2 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 rounded-lg flex items-center space-x-1">
@@ -292,7 +299,7 @@
             if (error || !data || data.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">Tidak ada data produksi untuk tanggal ini.</td></tr>`;
                 currentProductionData = [];
-                updateKPICards([], 0);
+                updateKPICards([], 0, 0);
                 return;
             }
 
@@ -467,7 +474,7 @@
             loadNGDetails(date, category);
         }
 
-        // Load Grafik Tren Harian dengan Garis Target (Annotation Plugin)
+        // Load Grafik Tren Harian dengan Garis Target
         async function loadIPOTrendChart() {
             const ctx = document.getElementById('ipoTrendChart').getContext('2d');
             if (trendChartInstance) trendChartInstance.destroy();
@@ -553,7 +560,34 @@
             document.getElementById('lens-modal').classList.remove('hidden');
         }
 
-        // === 6. PARSER EXCEL & UPLOAD LOGIC ===
+        // === 6. PARSER EXCEL, UPLOAD & DOWNLOAD TEMPLATE LOGIC ===
+        function downloadExcelTemplate() {
+            const templateData = [
+                {
+                    "LENS": "LENS TYPE A",
+                    "SECTION": "IPO",
+                    "QTY CHECKED": 100,
+                    "OK QTY": 85,
+                    "QTY NG": 15
+                },
+                {
+                    "LENS": "LENS TYPE B",
+                    "SECTION": "IPO",
+                    "QTY CHECKED": 200,
+                    "OK QTY": 190,
+                    "QTY NG": 10
+                }
+            ];
+
+            const worksheet = XLSX.utils.json_to_sheet(templateData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Produksi Harian");
+
+            // Simpan file excel
+            XLSX.writeFile(workbook, "Template_Produksi_PT_NOWI.xlsx");
+            showToast("Template Excel berhasil diunduh!", "success");
+        }
+
         async function processExcelUpload() {
             const fileInput = document.getElementById('excel-file');
             const uploadDate = document.getElementById('upload-date').value;
