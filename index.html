@@ -74,10 +74,19 @@
         <!-- Kolom Kiri & Tengah (Grafik & Tabel Produksi) -->
         <div class="lg:col-span-2 space-y-6">
             
-            <!-- Grafik Tren IPO OK -->
+            <!-- Grafik Tren Produksi dengan Filter Section -->
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                <div class="flex justify-between items-center mb-3">
-                    <h2 class="text-sm font-bold text-slate-700">IPO PRODUCTION OK CHART</h2>
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+                    <div class="flex items-center space-x-2">
+                        <h2 class="text-sm font-bold text-slate-700">PRODUCTION OK CHART</h2>
+                        <!-- Dropdown Filter Section -->
+                        <select id="section-filter" onchange="loadIPOTrendChart()" class="text-xs font-bold bg-slate-100 border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 no-print">
+                            <option value="ALL">SEMUA SECTION</option>
+                            <option value="IPO" selected>SECTION: IPO</option>
+                            <option value="COATING">SECTION: COATING</option>
+                            <option value="HARDCOATING">SECTION: HARDCOATING</option>
+                        </select>
+                    </div>
                     <span class="text-xs text-slate-400 font-medium">Target: <strong class="text-emerald-600">80% OK</strong></span>
                 </div>
                 <div class="h-64">
@@ -85,11 +94,11 @@
                 </div>
             </div>
 
-            <!-- Tabel IPO Produksi -->
+            <!-- Tabel Produksi -->
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                 <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
                     <div>
-                        <h2 class="text-sm font-bold text-slate-700">IPO PRODUKSI</h2>
+                        <h2 class="text-sm font-bold text-slate-700">DETAIL PRODUKSI</h2>
                         <p class="text-xs text-slate-400">Klik baris untuk detail NG</p>
                     </div>
                     <!-- Search Input -->
@@ -474,36 +483,99 @@
             loadNGDetails(date, category);
         }
 
-        // Load Grafik Tren Harian dengan Garis Target
+        // Load Grafik Tren Harian Dinamis Berdasarkan Section Terpilih
         async function loadIPOTrendChart() {
+            const selectedSection = document.getElementById('section-filter').value;
+
+            // Tarik data dari Supabase
+            let query = supabaseClient
+                .from('production_logs')
+                .select('date, section, qty_checked, qty_ok')
+                .order('date', { ascending: true });
+
+            if (selectedSection !== 'ALL') {
+                query = query.eq('section', selectedSection);
+            }
+
+            const { data, error } = await query;
+
             const ctx = document.getElementById('ipoTrendChart').getContext('2d');
             if (trendChartInstance) trendChartInstance.destroy();
 
+            if (error || !data || data.length === 0) {
+                // Tampilkan grafik kosong jika tidak ada data
+                trendChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: [], datasets: [] },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+                return;
+            }
+
+            // Grouping data berdasarkan tanggal
+            const dateAggregated = {};
+            data.forEach(item => {
+                // Format tanggal dari YYYY-MM-DD ke DD/MM
+                const formattedDate = item.date.split('-').slice(1).reverse().join('/');
+                if (!dateAggregated[formattedDate]) {
+                    dateAggregated[formattedDate] = { checked: 0, ok: 0 };
+                }
+                dateAggregated[formattedDate].checked += item.qty_checked || 0;
+                dateAggregated[formattedDate].ok += item.qty_ok || 0;
+            });
+
+            const labels = Object.keys(dateAggregated);
+            const volumeData = labels.map(date => dateAggregated[date].checked);
+            const yieldData = labels.map(date => {
+                const totalChecked = dateAggregated[date].checked;
+                const totalOK = dateAggregated[date].ok;
+                return totalChecked > 0 ? parseFloat(((totalOK / totalChecked) * 100).toFixed(1)) : 0;
+            });
+
+            // Render Chart.js
             trendChartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['01/09', '02/09', '03/09', '04/09', '07/09', '08/09', '09/09', '10/09', '11/09', '12/09', '14/09'],
+                    labels: labels,
                     datasets: [
                         {
                             type: 'line',
-                            label: '% OK Trend',
-                            data: [45, 65, 45, 60, 47, 60, 53, 67, 72, 77, 58],
+                            label: '% OK Yield',
+                            data: yieldData,
                             borderColor: '#10b981',
+                            backgroundColor: '#10b981',
                             borderWidth: 2,
                             fill: false,
-                            tension: 0.2
+                            tension: 0.2,
+                            yAxisID: 'yYield'
                         },
                         {
-                            label: 'Volume Qty',
-                            data: [325, 206, 422, 146, 167, 109, 174, 349, 360, 416, 362],
-                            backgroundColor: '#e2e8f0'
+                            label: 'Volume Qty Checked',
+                            data: volumeData,
+                            backgroundColor: '#cbd5e1',
+                            borderRadius: 4,
+                            yAxisID: 'yVolume'
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true } },
+                    scales: {
+                        yYield: {
+                            type: 'linear',
+                            position: 'left',
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { callback: value => value + '%' }
+                        },
+                        yVolume: {
+                            type: 'linear',
+                            position: 'right',
+                            beginAtZero: true,
+                            grid: { drawOnChartArea: false }
+                        }
+                    },
                     plugins: {
                         annotation: {
                             annotations: {
@@ -511,6 +583,7 @@
                                     type: 'line',
                                     yMin: 80,
                                     yMax: 80,
+                                    scaleID: 'yYield',
                                     borderColor: 'rgba(16, 185, 129, 0.7)',
                                     borderWidth: 2,
                                     borderDash: [6, 6],
@@ -572,7 +645,7 @@
                 },
                 {
                     "LENS": "LENS TYPE B",
-                    "SECTION": "IPO",
+                    "SECTION": "COATING",
                     "QTY CHECKED": 200,
                     "OK QTY": 190,
                     "QTY NG": 10
